@@ -1,0 +1,9 @@
+{
+  "estoque_oxigenio": 500.0,
+  "estoque_agua": 2000.0,
+  "num_astronautas": 6,
+  "consumo_oxigenio_por_astronauta": 0.84,
+  "consumo_agua_por_astronauta": 3.5,
+  "reserva_minima_oxigenio": 100.0,
+  "dias_alerta_autonomia": 30.0
+}

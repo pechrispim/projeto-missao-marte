@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Painel ECLSS - Habitat Marte</title>
+  <style>
+    :root { --fundo:#14100e; --card:#221a16; --texto:#f2e9e4; --sub:#b9a89e; --ok:#4caf7a; --alerta:#e6a23c; --critico:#e05a47; --marte:#c1440e; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, sans-serif; background:var(--fundo); color:var(--texto); }
+    header { padding:16px 24px; border-bottom:3px solid var(--marte); }
+    h1 { margin:0; font-size:1.4rem; }
+    main { max-width:900px; margin:0 auto; padding:24px 16px; display:grid; gap:16px; }
+    .card { background:var(--card); border-radius:10px; padding:16px 20px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; }
+    .rotulo { color:var(--sub); font-size:.85rem; }
+    .valor { font-size:1.8rem; font-weight:700; }
+    .barra { height:8px; background:#3a2e28; border-radius:4px; overflow:hidden; margin-top:8px; }
+    .barra > div { height:100%; background:var(--ok); transition:width .4s; }
+    label { display:block; margin:10px 0 4px; color:var(--sub); }
+    input { width:100%; padding:8px; border-radius:6px; border:1px solid #5a4a40; background:#1a1411; color:var(--texto); }
+    button { margin-top:14px; padding:10px 18px; border:0; border-radius:6px; background:var(--marte); color:#fff; font-weight:600; cursor:pointer; }
+    button:disabled { opacity:.5; cursor:wait; }
+    .mensagem { margin-top:12px; padding:10px; border-radius:6px; }
+    .sucesso { background:rgba(76,175,122,.15); color:var(--ok); }
+    .erro { background:rgba(224,90,71,.15); color:var(--critico); }
+    #alerta-crise { background:var(--critico); color:#fff; font-weight:700; text-align:center; }
+    .status-NORMAL { color:var(--ok); } .status-ALERTA { color:var(--alerta); } .status-CRITICO { color:var(--critico); }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+<header><h1>ECLSS &mdash; Painel de Controle do Habitat de Marte</h1></header>
+<main>
+  <div id="alerta-crise" class="card" role="alert" hidden>
+    ALERTA DE CRISE: <span id="alerta-texto"></span>
+  </div>
+
+  <section class="grid" aria-label="Níveis de recursos">
+    <div class="card">
+      <div class="rotulo">Oxigênio (kg)</div>
+      <div class="valor" id="nivel-oxigenio">500.00</div>
+      <div class="barra"><div id="barra-oxigenio" style="width:100%"></div></div>
+    </div>
+    <div class="card">
+      <div class="rotulo">Água (L)</div>
+      <div class="valor" id="nivel-agua">2000.00</div>
+    </div>
+    <div class="card">
+      <div class="rotulo">Autonomia (dias)</div>
+      <div class="valor" id="dias-autonomia">95.2</div>
+    </div>
+    <div class="card">
+      <div class="rotulo">Status do habitat</div>
+      <div class="valor status-NORMAL" id="status-habitat">NORMAL</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Solicitar cota extra de oxigênio</h2>
+    <form id="form-solicitacao" novalidate>
+      <label for="astronauta">Astronauta</label>
+      <input id="astronauta" name="astronauta" type="text" autocomplete="off">
+      <label for="quantidade">Quantidade (kg)</label>
+      <input id="quantidade" name="quantidade" type="number" step="0.01" min="0">
+      <button id="btn-solicitar" type="submit">Solicitar</button>
+    </form>
+    <div id="processando" class="rotulo" hidden>Transmitindo solicitação ao ECLSS...</div>
+    <div id="mensagem" class="mensagem" role="status" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2>Histórico de solicitações</h2>
+    <ul id="historico"></ul>
+  </section>
+</main>
+
+<script>
+  // Parâmetros iniciais do habitat (espelham tests/dados/parametros_habitat.json)
+  const habitat = {
+    oxigenio: 500, agua: 2000, astronautas: 6,
+    consumoO2: 0.84, consumoAgua: 3.5,
+    reservaMinima: 100, diasAlerta: 30, capacidadeO2: 500
+  };
+  // Latência simulada de comunicação com o sistema de suporte à vida (ms).
+  const LATENCIA_MS = 1200;
+
+  const $ = (id) => document.getElementById(id);
+
+  function autonomia() {
+    const o2 = habitat.oxigenio / (habitat.astronautas * habitat.consumoO2);
+    const agua = habitat.agua / (habitat.astronautas * habitat.consumoAgua);
+    return Math.round(Math.min(o2, agua) * 10) / 10;
+  }
+
+  function status() {
+    if (habitat.oxigenio <= habitat.reservaMinima) return "CRITICO";
+    if (autonomia() < habitat.diasAlerta) return "ALERTA";
+    return "NORMAL";
+  }
+
+  function renderizar() {
+    $("nivel-oxigenio").textContent = habitat.oxigenio.toFixed(2);
+    $("nivel-agua").textContent = habitat.agua.toFixed(2);
+    $("dias-autonomia").textContent = autonomia().toFixed(1);
+    $("barra-oxigenio").style.width = (habitat.oxigenio / habitat.capacidadeO2 * 100) + "%";
+    const s = status();
+    $("status-habitat").textContent = s;
+    $("status-habitat").className = "valor status-" + s;
+  }
+
+  function mostrarMensagem(texto, tipo) {
+    const m = $("mensagem");
+    m.textContent = texto;
+    m.className = "mensagem " + tipo;
+    m.hidden = false;
+  }
+
+  function alertarCrise(texto) {
+    $("alerta-texto").textContent = texto;
+    $("alerta-crise").hidden = false;
+  }
+
+  function processar(astronauta, quantidade) {
+    if (!astronauta) return mostrarMensagem("Erro: informe a identificação do astronauta.", "erro");
+    if (!(quantidade > 0)) return mostrarMensagem("Erro: a quantidade deve ser maior que zero.", "erro");
+
+    const disponivel = Math.max(habitat.oxigenio - habitat.reservaMinima, 0);
+    if (quantidade > disponivel) {
+      mostrarMensagem(`Negado: oxigênio insuficiente. Disponível acima da reserva: ${disponivel.toFixed(2)} kg.`, "erro");
+      alertarCrise(`solicitação de ${quantidade.toFixed(2)} kg por ${astronauta} excede o estoque seguro.`);
+      return;
+    }
+
+    habitat.oxigenio = Math.round((habitat.oxigenio - quantidade) * 100) / 100;
+    const item = document.createElement("li");
+    item.textContent = `${astronauta}: ${quantidade.toFixed(2)} kg`;
+    $("historico").appendChild(item);
+    renderizar();
+    mostrarMensagem(`Aprovado: ${quantidade.toFixed(2)} kg liberados para ${astronauta}.`, "sucesso");
+    if (status() !== "NORMAL") alertarCrise(`autonomia do habitat reduzida para ${autonomia().toFixed(1)} dias.`);
+  }
+
+  $("form-solicitacao").addEventListener("submit", (evento) => {
+    evento.preventDefault();
+    const astronauta = $("astronauta").value.trim();
+    const quantidade = parseFloat($("quantidade").value);
+    $("btn-solicitar").disabled = true;
+    $("mensagem").hidden = true;
+    $("processando").hidden = false;
+
+    setTimeout(() => {
+      processar(astronauta, quantidade);
+      $("processando").hidden = true;
+      $("btn-solicitar").disabled = false;
+    }, LATENCIA_MS);
+  });
+
+  renderizar();
+</script>
+</body>
+</html>

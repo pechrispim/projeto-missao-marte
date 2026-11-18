@@ -1,0 +1,38 @@
+name: CI - Missão Marte ECLSS
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Setup do Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalação das dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Versão do Chrome (Selenium headless)
+        run: google-chrome --version
+
+      - name: Execução da suíte completa (unitários, mocks, Selenium e BDD) com cobertura
+        run: pytest -v --cov=src --cov-report=term-missing
+
+      - name: Upload das evidências (screenshots) em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-falhas
+          path: screenshots/
+          if-no-files-found: ignore
